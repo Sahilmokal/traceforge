@@ -1,7 +1,8 @@
 fastapi
 uvicorn
+elasticsearch==8.13.2
 scikit-learn
-elasticsearch
 numpy
+pandas
 apscheduler
 requests
