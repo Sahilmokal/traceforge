@@ -1,38 +1,89 @@
 from elasticsearch import Elasticsearch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from config import ELASTIC_HOST
 
 es = Elasticsearch(ELASTIC_HOST)
 
-LOG_INDEX_PATTERN = "logs-*"
+LOG_INDEX_PATTERN = "logs"
 ALERT_INDEX = "alerts"
 
 
 # ----------------------------
 # LOG FETCH (existing realtime helper)
 # ----------------------------
-def fetch_logs(size=1000, minutes=2):
+def fetch_logs(
+    size: int = 1000,
+    minutes: int = None,
+    start_time: str = None,
+    end_time: str = None
+):
+    """
+    Fetch logs from Elasticsearch.
 
-    now = datetime.utcnow()
-    past = now - timedelta(minutes=minutes)
+    Supports:
+    - Realtime mode via `minutes`
+    - Historical mode via `start_time` and `end_time`
+    """
 
-    query = {
-        "query": {
+    if size <= 0:
+        size = 1000
+
+    if size > 10000:
+        size = 10000
+
+    # Prevent ambiguous queries
+    if minutes and (start_time or end_time):
+        raise ValueError("Use either 'minutes' OR 'start_time/end_time', not both.")
+
+    must = []
+
+    # -----------------------------
+    # Realtime mode
+    # -----------------------------
+    if minutes:
+        now = datetime.now(timezone.utc)
+        past = now - timedelta(minutes=minutes)
+
+        must.append({
             "range": {
                 "timestamp": {
                     "gte": past.isoformat(),
                     "lte": now.isoformat()
                 }
             }
+        })
+
+    # -----------------------------
+    # Historical mode
+    # -----------------------------
+    if start_time and end_time:
+        must.append({
+            "range": {
+                "timestamp": {
+                    "gte": start_time,
+                    "lte": end_time
+                }
+            }
+        })
+
+    # -----------------------------
+    # Final Query
+    # -----------------------------
+    query = {
+        "query": {
+            "bool": {
+                "must": must if must else [{"match_all": {}}]
+            }
         },
         "size": size,
-        "sort": [{"timestamp": {"order": "desc"}}]
+        "sort": [
+            {"timestamp": {"order": "desc"}}
+        ]
     }
 
-    response = es.search(index=LOG_INDEX_PATTERN, body=query)
+    response = es.search(index="logs", body=query)
 
     return [hit["_source"] for hit in response["hits"]["hits"]]
-
 
 # ----------------------------
 # GENERIC PAGINATED SEARCH

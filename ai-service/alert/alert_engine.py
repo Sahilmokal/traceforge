@@ -53,21 +53,28 @@ def alert_exists(signature):
 
 
 def create_alert(anomalies, rca):
-
     signature = generate_signature(anomalies)
 
-    # Deduplication
     if alert_exists(signature):
         return None
 
+    root_service = rca.get("likelyRootService") if isinstance(rca, dict) else None
+
+    anomaly_type = "anomaly_detected"
+    if anomalies:
+        anomaly_type = list(anomalies.keys())[0]
+
     alert = {
         "id": str(uuid.uuid4()),
-        "createdAt": datetime.utcnow().isoformat(),
+        "firstDetectedAt": datetime.utcnow().isoformat(),
         "type": "anomaly_detected",
+        "anomalyType": anomaly_type,
         "severity": classify_severity(anomalies),
         "status": "NEW",
         "anomalies": anomalies,
         "rca": rca,
+        "rootService": root_service or "unknown-service",
+        "confidence": 85,
         "signature": signature
     }
 

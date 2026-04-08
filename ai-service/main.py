@@ -1,9 +1,17 @@
+import os
+import time
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+from elasticsearch import Elasticsearch
+
 from elastic_client import (
     fetch_logs,
     search_with_pagination,
-    es,
-    ALERT_INDEX
+    ALERT_INDEX,
+    create_alert_index
 )
 from clustering.clustering import cluster_logs
 from rca.rca_engine import perform_rca
@@ -16,9 +24,90 @@ from anomaly.anomaly import (
 )
 from scheduler import start_scheduler
 
-app = FastAPI()
 
-start_scheduler()
+# =====================================================
+# ELASTICSEARCH CONNECTION
+# =====================================================
+
+ELASTIC_HOST = os.getenv("ELASTIC_HOST", "http://elasticsearch:9200")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+
+
+def create_es_client(host: str):
+    for attempt in range(20):
+        try:
+            client = Elasticsearch(host)
+            if client.ping():
+                print(f"Connected to Elasticsearch at {host}")
+                return client
+            else:
+                print(f"Elasticsearch ping failed (attempt {attempt + 1})")
+        except Exception as e:
+            print(f"Elasticsearch not ready (attempt {attempt + 1}): {e}")
+        time.sleep(5)
+
+    print("Elasticsearch not available after retries")
+    return None
+
+
+# =====================================================
+# APP LIFECYCLE
+# =====================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Starting AI Service...")
+
+    app.state.es = create_es_client(ELASTIC_HOST)
+
+    if app.state.es is None:
+        print("WARNING: Elasticsearch connection failed. Some endpoints may not work.")
+
+    try:
+        create_alert_index()
+        start_scheduler()
+        print("Scheduler started and alert index ensured.")
+    except Exception as e:
+        print(f"Startup warning: {e}")
+
+    yield
+
+    print("Shutting down AI Service...")
+    if app.state.es:
+        app.state.es.close()
+
+
+# =====================================================
+# FASTAPI APP
+# =====================================================
+
+app = FastAPI(lifespan=lifespan)
+
+# =====================================================
+# CORS CONFIG
+# =====================================================
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# =====================================================
+# HEALTH CHECK
+# =====================================================
+
+@app.get("/")
+def root():
+    return {"message": "AI Service is running"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "ai-service"}
+
 
 # =====================================================
 # LOGS (Dashboard Ready + Historical Support)
@@ -36,7 +125,6 @@ def get_logs(
     sort_field: str = "timestamp",
     sort_order: str = "desc"
 ):
-
     must = []
 
     if service:
@@ -68,7 +156,7 @@ def get_logs(
     query = {"bool": {"must": must}} if must else {"match_all": {}}
 
     response = search_with_pagination(
-        "logs-*",
+        "logs",
         query,
         page,
         size,
@@ -105,27 +193,39 @@ def get_realtime_rca(
 
 @app.get("/rca/historical")
 def get_historical_rca(
-    start_time: str,
-    end_time: str,
-    size: int = Query(5000, ge=10, le=20000)
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    size: int = Query(2000, ge=10, le=20000)
 ):
+    if not start_time and not end_time:
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - timedelta(hours=24)
+
+    if (start_time and not end_time) or (end_time and not start_time):
+        return {"error": "Provide both start_time and end_time or neither."}
+
+    if start_time >= end_time:
+        return {"error": "start_time must be earlier than end_time."}
+
     logs = fetch_logs(
         size=size,
-        start_time=start_time,
-        end_time=end_time
+        start_time=start_time.isoformat(),
+        end_time=end_time.isoformat()
     )
 
     rca = perform_rca(logs)
 
     return {
         "mode": "historical",
+        "windowStart": start_time,
+        "windowEnd": end_time,
         "totalLogsAnalyzed": len(logs),
         "rca": rca
     }
 
 
 # =====================================================
-# ANOMALIES (Realtime + Unified)
+# ANOMALIES
 # =====================================================
 
 @app.get("/anomalies")
@@ -133,7 +233,6 @@ def get_anomalies(
     minutes: int = Query(5, ge=1, le=1440),
     size: int = Query(1000, ge=10, le=10000)
 ):
-
     logs = fetch_logs(size=size, minutes=minutes)
 
     return {
@@ -147,7 +246,7 @@ def get_anomalies(
 
 
 # =====================================================
-# ALERTS (Pagination + Filtering + Sorting)
+# ALERTS
 # =====================================================
 
 @app.get("/alerts")
@@ -161,7 +260,6 @@ def get_alerts(
     sort_field: str = "firstDetectedAt",
     sort_order: str = "desc"
 ):
-
     must = []
 
     if status:
@@ -201,23 +299,40 @@ def get_alerts(
 
 @app.post("/alerts/{alert_id}/ack")
 def acknowledge_alert(alert_id: str):
-
+    es = Elasticsearch(ELASTIC_HOST)
     es.update(
         index=ALERT_INDEX,
         id=alert_id,
         body={"doc": {"status": "ACKNOWLEDGED"}}
     )
-
     return {"message": "Alert acknowledged"}
 
 
 @app.post("/alerts/{alert_id}/resolve")
 def resolve_alert(alert_id: str):
-
+    es = Elasticsearch(ELASTIC_HOST)
     es.update(
         index=ALERT_INDEX,
         id=alert_id,
         body={"doc": {"status": "RESOLVED"}}
     )
-
     return {"message": "Alert resolved"}
+
+
+# =====================================================
+# CLUSTERS
+# =====================================================
+
+@app.get("/clusters")
+def get_clusters(
+    size: int = Query(500, ge=10, le=5000),
+    minutes: int = Query(None, ge=1, le=1440)
+):
+    logs = fetch_logs(size=size, minutes=minutes)
+    clusters = cluster_logs(logs)
+
+    return {
+        "totalLogsFetched": len(logs),
+        "totalClusters": len(clusters),
+        "clusters": clusters
+    }
