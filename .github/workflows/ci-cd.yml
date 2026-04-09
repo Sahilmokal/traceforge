@@ -31,7 +31,7 @@ jobs:
           java-version: '17'
 
       - name: Build with Maven
-        working-directory: ./${{ matrix.service }}
+        working-directory: ./backend/${{ matrix.service }}
         run: mvn clean package -DskipTests
 
   # ------------------------------------------------
@@ -71,11 +71,11 @@ jobs:
           node-version: '20'
 
       - name: Install frontend dependencies
-        working-directory: ./frontend
+        working-directory: ./traceforge
         run: npm install
 
       - name: Build frontend
-        working-directory: ./frontend
+        working-directory: ./traceforge
         run: npm run build
 
   # ------------------------------------------------
