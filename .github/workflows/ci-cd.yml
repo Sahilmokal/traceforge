@@ -31,7 +31,8 @@ jobs:
           java-version: '17'
 
       - name: Build with Maven
-        working-directory: ./backend/${{ matrix.service }}
+        working-directory: ./backend/${{ matrix.service }} 
+        
         run: mvn clean package -DskipTests
 
   # ------------------------------------------------
