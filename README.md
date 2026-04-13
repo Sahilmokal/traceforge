@@ -1,85 +1,210 @@
-SentinelOps
+# TraceForge AI — Intelligent Log Monitoring & Automated Root Cause Analysis
 
-AI-Based Log Monitoring & Root Cause Analysis Platform
+## 🚀 Problem Statement
 
-🚀 Problem Statement
+Modern distributed systems generate massive volumes of logs across multiple services. Debugging failures becomes extremely difficult due to:
 
-Modern distributed systems generate massive volumes of logs, and engineers often manually inspect them during production failures. SentinelOps automates log pattern discovery, anomaly detection, and probable root cause identification to reduce downtime and speed up incident resolution.
+* Lack of centralized log visibility
+* Difficulty in identifying anomalies in real-time
+* Complex failure propagation across services
+* Manual root cause analysis
 
-🧠 What This Project Does
+TraceForge AI solves this by providing an **AI-assisted log monitoring platform** that detects anomalies and automatically identifies probable root causes.
 
-SentinelOps:
 
-Collects structured logs from multiple services
+## 🛠️ Tech Stack
 
-Processes logs asynchronously using a message queue
+### Backend
 
-Stores logs in a searchable system
+* Java (Spring Boot)
+* Python (FastAPI)
 
-Detects abnormal behavior using unsupervised machine learning
+### Streaming & Storage
 
-Identifies likely root causes of incidents
+* Kafka
+* Elasticsearch
 
-Exposes alerts and RCA insights through a dashboard
+### AI / Intelligence Layer
 
-🏗️ System Architecture
+* TF-IDF Vectorization
+* DBSCAN Clustering (Unsupervised Learning)
+* Statistical Anomaly Detection
+* Trace-based Root Cause Analysis
 
-High-Level Flow
-Application Services
-        ↓
-Log Ingestion Service (Spring Boot)
-        ↓
-Kafka (raw-logs topic)
-        ↓
-Log Processor Service
-        ↓
-Elasticsearch
-        ↓
-AI Analysis Service (Clustering + Anomaly Detection + RCA)
-        ↓
-Alert API
-        ↓
-Frontend Dashboard
+### DevOps
 
-🛠️ Tech Stack
-Backend
+* Docker & Docker Compose
+* AWS EC2 Deployment
+* Nginx Reverse Proxy
+* GitHub Actions (CI/CD)
 
-Java 17
+---
 
-Spring Boot 3.x
+## 🧠 How This Is AI-Driven
 
-Spring Kafka
+TraceForge AI applies **unsupervised machine learning and statistical analysis**:
 
-Messaging
+* Log messages are vectorized using TF-IDF
+* DBSCAN groups similar log patterns dynamically
+* Anomaly detection identifies:
 
-Apache Kafka
+  * High error rates
+  * Traffic drops
+  * Rare log patterns
+  * Sudden spikes
+* RCA engine correlates failures using:
 
-Storage
+  * traceId
+  * timestamp ordering
+  * propagation window
 
-Elasticsearch (Time-based indexing)
+---
 
-AI / ML
+## ⚙️ Key Features
 
-Python 3.10
+* Real-time log ingestion pipeline
+* Distributed log processing via Kafka
+* Intelligent anomaly detection
+* Automated Root Cause Analysis (RCA)
+* Alert generation with severity & lifecycle
+* Interactive dashboard for monitoring
 
-scikit-learn
+---
 
-TF-IDF Vectorization
+## 🚀 Deployment
 
-Unsupervised Anomaly Detection (Isolation Forest / DBSCAN)
+The system is fully containerized and deployed using Docker Compose.
 
-Frontend
+### Run locally:
 
-React
+```
+docker-compose up --build
+```
 
-Infrastructure
+### AWS Deployment:
 
-Docker
+* Deployed on EC2 instance
+* Services exposed via Nginx reverse proxy
+* Elastic IP used for stable access
 
-Docker Compose
+---
 
-Nginx
+## 🔐 Multi-Tenancy (Design Consideration)
 
-Cloud
+Current implementation is **single-tenant** for simplicity.
 
-AWS EC2
+In production, multi-tenancy can be implemented using:
+
+* tenantId tagging in logs
+* Elasticsearch query filtering
+* Separate indices per tenant
+
+---
+
+## ⚖️ Design Decisions
+
+### Why Kafka?
+
+* Decouples ingestion from processing
+* Handles high throughput
+* Enables scalability
+
+### Why Elasticsearch?
+
+* Fast log search
+* Time-based indexing
+* Suitable for observability systems
+
+### Why DBSCAN over KMeans?
+
+* No need to predefine number of clusters
+* Detects noise (rare logs) naturally
+* Works better for dynamic log patterns
+
+---
+
+## ⚠️ Trade-offs
+
+* DBSCAN performance degrades with very large datasets
+* Elasticsearch requires significant memory
+* No deep learning (focus is on practical ML)
+* Simplified deployment (single-node setup)
+
+---
+
+## 📈 Scalability Discussion
+
+To scale the system:
+
+* Kafka can be partitioned across brokers
+* Log processors can be horizontally scaled
+* Elasticsearch can be clustered
+* AI service can be deployed as multiple workers
+
+For high throughput systems (1M logs/min), bottlenecks would be:
+
+* Elasticsearch indexing
+* Kafka throughput limits
+* Network I/O
+
+---
+
+## 🧪 Failure Simulation
+
+The system was tested under:
+
+* High log volume
+* Error spikes
+* Rare error injection
+* Service failure propagation
+
+Results:
+
+* Anomalies detected correctly
+* RCA identified root services with confidence score
+* Alerts triggered appropriately
+
+---
+
+## 📊 Example RCA Output
+
+```
+Root Service: inventory-service  
+Impacted Services: order-service  
+Reason: Database timeout  
+Confidence: 0.47  
+```
+
+---
+
+## 🔮 Future Improvements
+
+* Replace DBSCAN with streaming clustering
+* Add OpenTelemetry integration
+* Implement real-time stream processing
+* Add authentication & multi-tenant support
+* Introduce LLM-based log summarization
+* Improve anomaly confidence modeling
+
+---
+
+## 💰 Cost Optimization
+
+The system is deployed using on-demand EC2:
+
+* Instance is stopped when not in use
+* Only storage cost persists
+* Reduces monthly cost to ~₹200–₹350
+
+---
+
+## 🎯 Conclusion
+
+TraceForge AI demonstrates a **production-style observability platform** combining:
+
+* Distributed systems design
+* Machine learning
+* Real-time processing
+* Cloud deployment
+
+This project focuses on **practical engineering trade-offs and scalable architecture** rather than academic complexity.
